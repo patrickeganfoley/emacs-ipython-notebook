@@ -65,25 +65,25 @@ Links:
 Quick try
 ---------
 
-If you want to try EIN but think preparing all the requirements is too much, try
-this!::
+The fastest way to get EIN running in this modern age is to download from MELPA_
+or, if you are a spacemacs_ user, through installing the ipython-notebook_
+layer. Using zeroein_ is no longer supported, though in theory it should still
+work.
 
-   git clone git://github.com/millejoh/emacs-ipython-notebook.git
-   cd emacs-ipython-notebook/
-   lisp/zeroein.el
+If you are installing from MELPA_ and have issues with some functions not being
+available after emacs starts, try adding the following to your emacs init file:
 
-This will launch a new Emacs instance.
+.. sourcecode:: cl
 
-You can use environment variable ``EMACS`` to control Emacs executable
-to use.::
+   (package-initialize)
+   (require 'ein)
+   (require 'ein-loaddefs)
+   (require 'ein-notebook)
+   (require 'ein-subpackages)
 
-   EMACS=emacs-snapshot lisp/zeroein.el
-
-The above command requires /bin/sh.  If the above command does not work
-(e.g., you are using MS Windows), try the following command::
-
-  emacs -Q -l lisp/zeroein.el
-
+.. _spacemacs: http://spacemacs.org/
+.. _ipython-notebook: http://spacemacs.org/layers/+lang/ipython-notebook/README.html
+.. _zeroein: http://tkf.github.io/emacs-ipython-notebook/#quick-try
 
 Requirements
 ------------
@@ -206,28 +206,51 @@ Here is the minimal configuration.  See customization_ for more details.
 .. sourcecode:: cl
 
    (require 'ein)
+   (require 'ein-loaddefs)
+   (require 'ein-notebook)
+   (require 'ein-subpackages)
 
 
 Usage
 -----
 
-1. Start `IPython notebook server`_.
+1. Start the `Jupyter notebook server`_ from the terminal or call ``M-x
+   ein:jupyter-server-start`` from emacs. Note starting the notebook server from
+   emacs will automatically call ``ein:jupyter-server-login-and-open``, making
+   steps 2 and 3 below unnecessary!
 
-2. Hit ``M-x ein:notebooklist-open`` to open notebook list.  This will
-   open :ref:`notebook list <notebook-list-commands>` buffer.
+2. If you have token or password authentication enabled then you will need to
+   call ``M-x ein:notebooklist-login`` and enter the appropriate password.
 
-3. In the notebook list buffer, you can open notebooks by selecting the
+3. Hit ``M-x ein:notebooklist-open`` to open notebook list. This will open
+   :ref:`notebook list <notebook-list-commands>` buffer.
+
+4. In the notebook list buffer, you can open notebooks by selecting the
    ``[Open]`` buttons.  See the :ref:`notebook <notebook-commands>` section for
    operations and commands available in the notebook buffer.
 
-.. _`IPython notebook server`:
-   http://ipython.org/ipython-doc/stable/interactive/htmlnotebook.html
+.. _`Jupyter notebook server`:
+   https://jupyter.readthedocs.io/en/latest/running.html
 
 
 Commands/Keybinds
 -----------------
 
 .. _notebook-list-commands:
+
+Running a Jupyter Notebook Server from Emacs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Using the commands below you start a jupyter notebook session from within emacs
+(i.e. no need to drop to the terminal shell and call ``jupyter notebook``). If
+you are particularly lucky ein will also determine the access url and token
+authentication for the running server and automatically log you in.
+
+Note that the below work best with current (> v4.3.1) versions of jupyter.
+
+.. el:function:: ein:jupyter-server-start
+.. el:function:: ein:jupyter-server-stop
+.. el:function:: ein:jupyter-server-login-and-open
 
 Notebook list
 ^^^^^^^^^^^^^
@@ -240,6 +263,8 @@ port or URL of the IPython notebook server.
 .. el:function:: ein:notebooklist-open-notebook-global
 .. el:function:: ein:notebooklist-login
 .. el:function:: ein:junk-new
+.. el:function:: ein:notebooklist-enable-keepalive
+.. el:function:: ein:notebooklist-disable-keepalive
 
 .. el:keymap:: ein:notebooklist-mode-map
    :exclude: widget-button
@@ -624,6 +649,17 @@ everything the log buffer.  You can reset the patch and log level with
 
 Change Log
 ==========
+
+v0.13.0
+-------
+
+* Added commands ``ein:jupyter-server-start``, ``ein:jupyter-server-stop``, and
+  ``ein:jupyter-server-login-and-open``.
+* Added a very basic and quite silly object inspector that has almost no
+  features at the moment. Nonetheless, the curious can try executing ``C-c i``
+  over a defined object in a notebook buffer.
+* Add a keep-alive feature to prevent cookie expiration on very long-running
+  notebook sessions.
 
 v0.12.1
 -------
