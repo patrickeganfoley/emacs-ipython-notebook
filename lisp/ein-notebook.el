@@ -548,7 +548,7 @@ of minor mode."
   spec
   language)
 
-(defvar ein:available-kernelspecs (make-hash-table))
+(defvar ein:available-kernelspecs (make-hash-table :test #'equal))
 
 (defun ein:kernelspec-for-nb-metadata (kernelspec)
   (let ((display-name (plist-get (ein:$kernelspec-spec kernelspec) :display_name)))
@@ -576,15 +576,16 @@ of minor mode."
   "Query jupyter server for the list of available
 kernels. Results are stored in ein:available-kernelspec, hashed
 on server url/port."
-  (ein:query-singleton-ajax
-   (list 'ein:qeury-kernelspecs url-or-port)
-   (ein:url url-or-port "api/kernelspecs")
-   :type "GET"
-   :timeout ein:content-query-timeout
-   :parser 'ein:json-read
-   :sync t
-   :success (apply-partially #'ein:query-kernelspecs-success url-or-port)
-   :error (apply-partially #'ein:query-kernelspecs-error)))
+  (unless (gethash url-or-port ein:available-kernelspecs)
+    (ein:query-singleton-ajax
+     (list 'ein:qeury-kernelspecs url-or-port)
+     (ein:url url-or-port "api/kernelspecs")
+     :type "GET"
+     :timeout ein:content-query-timeout
+     :parser 'ein:json-read
+     :sync t
+     :success (apply-partially #'ein:query-kernelspecs-success url-or-port)
+     :error (apply-partially #'ein:query-kernelspecs-error))))
 
 (defun* ein:query-kernelspecs-success (url-or-port &key data &allow-other-keys)
   (let ((ks (list :default (plist-get data :default)))
@@ -823,13 +824,17 @@ This is equivalent to do ``C-c`` in the console program."
            (3 (ein:write-nbformat3-worksheets notebook))
            (4 (ein:write-nbformat4-worksheets notebook))
            (t (ein:log 'error "EIN does not support saving notebook format %s" (ein:$notebook-nbformat notebook))))))
-    (plist-put (cdr (assq 'metadata data))
-               :name (ein:$notebook-notebook-name notebook))
-    (ein:aif (ein:$notebook-nbformat-minor notebook)
-        ;; Do not set nbformat when it is not given from server.
-        (push `(nbformat_minor . ,it) data))
-    (push `(nbformat . ,(ein:$notebook-nbformat notebook)) data)
-    data))
+    ;; Apparently metadata can be either a hashtable or a plist...
+    (let ((metadata (cdr (assq 'metadata data))))
+      (if (hash-table-p metadata)
+          (setf (gethash 'name metadata) (ein:$notebook-notebook-name notebook))
+        (plist-put metadata
+                   :name (ein:$notebook-notebook-name notebook)))
+      (ein:aif (ein:$notebook-nbformat-minor notebook)
+          ;; Do not set nbformat when it is not given from server.
+          (push `(nbformat_minor . ,it) data))
+      (push `(nbformat . ,(ein:$notebook-nbformat notebook)) data)
+      data)))
 
 
 (defun ein:write-nbformat3-worksheets (notebook)
@@ -866,7 +871,8 @@ This is equivalent to do ``C-c`` in the console program."
 
 (defun ein:notebook-save-notebook (notebook retry &optional callback cbargs)
   (condition-case err
-      (run-hooks 'before-save-hook)
+      (with-current-buffer (ein:notebook-buffer notebook)
+        (run-hooks 'before-save-hook))
     (error (ein:log 'warn "Error running save hooks: '%s'. I will still try to save the notebook." (error-message-string err))))
   (let ((content (ein:content-from-notebook notebook)))
     (ein:events-trigger (ein:$notebook-events notebook)
