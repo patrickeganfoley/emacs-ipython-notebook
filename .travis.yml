@@ -6,11 +6,11 @@ addons:
 matrix:
   fast_finish: true
   allow_failures:
-    - env: EVM_EMACS=emacs-git-snapshot
+    - env: EVM_EMACS=emacs-snapshot-travis
 python:
   - "2.7"
-  - "3.4"
   - "3.5"
+  - "3.6"
 before_install:
   - sudo apt-get -yq update
   - sudo apt-get -yq install git
@@ -22,8 +22,8 @@ install:
   - pip install jupyter==$JUPYTER
 env:
   - EVM_EMACS=emacs-24.4-travis IPYCMD=jupyter JUPYTER=1.0.0
-  - EVM_EMACS=emacs-25.1-travis IPYCMD=jupyter JUPYTER=1.0.0
-  - EVM_EMACS=emacs-git-snapshot-travis IPYCMD=jupyter JUPYTER=1.0.0
+  - EVM_EMACS=emacs-25.3-travis IPYCMD=jupyter JUPYTER=1.0.0
+  - EVM_EMACS=emacs-snapshot-travis IPYCMD=jupyter JUPYTER=1.0.0
 script:
   - emacs --version
   - python tools/testein.py --emacs emacs --ipython $(which $IPYCMD)
