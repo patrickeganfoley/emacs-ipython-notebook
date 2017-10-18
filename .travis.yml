@@ -7,9 +7,9 @@ matrix:
   fast_finish: true
   allow_failures:
 python:
-  - "2.7"
+#  - "2.7"
   - "3.5"
-  - "3.6"
+#  - "3.6"
 before_install:
   - sudo apt-get -yq update
   - sudo apt-get -yq install git
@@ -20,8 +20,8 @@ before_install:
 install:
   - pip install jupyter==$JUPYTER
 env:
-  - EVM_EMACS=emacs-24.4-travis IPYCMD=jupyter JUPYTER=1.0.0
-  - EVM_EMACS=emacs-24.5-travis IPYCMD=jupyter JUPYTER=1.0.0
+#  - EVM_EMACS=emacs-24.4-travis IPYCMD=jupyter JUPYTER=1.0.0
+#  - EVM_EMACS=emacs-24.5-travis IPYCMD=jupyter JUPYTER=1.0.0
   - EVM_EMACS=emacs-25.3-travis IPYCMD=jupyter JUPYTER=1.0.0
 script:
   - emacs --version

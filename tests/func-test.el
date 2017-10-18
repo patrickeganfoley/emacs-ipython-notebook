@@ -30,7 +30,7 @@ PREDARGS is argument list for the PREDICATE function.
 Make MAX-COUNT larger \(default 50) to wait longer before timeout."
   (ein:log 'debug "TESTING-WAIT-UNTIL start")
   (ein:log 'debug "TESTING-WAIT-UNTIL waiting on: %s" message)
-  (unless max-count (setq max-count 50))
+  (unless max-count (setq max-count 200))
   (unless (loop repeat max-count
                 when (apply predicate predargs)
                 return t
@@ -42,22 +42,23 @@ Make MAX-COUNT larger \(default 50) to wait longer before timeout."
 
 (defun ein:testing-start-server ()
   (unless (and (boundp '%ein:jupyter-server-session%) (processp %ein:jupyter-server-session%) (bufferp (process-buffer %ein:jupyter-server-session%)))
-    (ein:log 'debug "TESTING-START-SERVER starting jupyter server.")
-    (ein:jupyter-server-start ein:testing-jupyter-server-command ein:testing-jupyter-server-directory t)
-    (ein:testing-wait-until "Jupyter notebook server."
-                            #'(lambda (buf)
-                                (with-current-buffer buf
-                                  (goto-char (point-min))
-                                  (search-forward "The Jupyter Notebook is running" nil t)))
-                            (list (process-buffer %ein:jupyter-server-session%))
-                            100)
-    (ein:log 'debug "TESTING-START-SERVER logging in.")
-    (multiple-value-bind (url token) (ein:jupyter-server-conn-info)
-      (ein:notebooklist-login url token)
-      (setq ein:testing-port url)
-      (setq ein:testing-token token)
-      (ein:log 'debug "TESTING-START-SERVER succesfully logged in.")
-      url)))
+    (let ((ein:jupyter-server-run-timeout 120000))
+      (ein:log 'debug "TESTING-START-SERVER starting jupyter server.")
+      (ein:jupyter-server-start ein:testing-jupyter-server-command ein:testing-jupyter-server-directory t)
+      (ein:testing-wait-until "Jupyter notebook server."
+                              #'(lambda (buf)
+                                  (with-current-buffer buf
+                                    (goto-char (point-min))
+                                    (search-forward "The Jupyter Notebook is running" nil t)))
+                              (list (process-buffer %ein:jupyter-server-session%))
+                              1000)
+      (ein:log 'debug "TESTING-START-SERVER logging in.")
+      (multiple-value-bind (url token) (ein:jupyter-server-conn-info)
+        (ein:notebooklist-login url token)
+        (setq ein:testing-port url)
+        (setq ein:testing-token token)
+        (ein:log 'debug "TESTING-START-SERVER succesfully logged in.")
+        url))))
 
 (defun ein:testing-get-notebook-by-name (url-or-port notebook-name &optional path)
   (ein:log 'debug "TESTING-GET-NOTEBOOK-BY-NAME start")
@@ -111,12 +112,11 @@ Make MAX-COUNT larger \(default 50) to wait longer before timeout."
   (ein:testing-wait-until "ein:notebooklist-open"
                           (lambda ()
                             (bufferp (get-buffer (format ein:notebooklist-buffer-name-template url-or-port))))
-                          nil 50)
+                          nil)
   (with-current-buffer (ein:notebooklist-get-buffer url-or-port)
     (ein:testing-wait-until "ein:notebooklist-get-buffer"
                             (lambda () (eql major-mode 'ein:notebooklist-mode))
-                            nil
-                            50)
+                            nil)
     (ein:log 'debug "TESTING-DELETE-NOTEBOOK deleting notebook")
     (ein:notebooklist-delete-notebook (ein:$notebook-notebook-path notebook)))
   (ein:log 'debug "TESTING-DELETE-NOTEBOOK end"))
@@ -154,7 +154,7 @@ Make MAX-COUNT larger \(default 50) to wait longer before timeout."
        (ein:aand notebook
                  (ein:$notebook-kernel it)
                  (ein:kernel-live-p it)))
-     nil 50)
+     nil)
     (ein:log 'verbose "ERT TESTING-DELETE-UNTITLED0 deleting notebook")
     (ein:testing-delete-notebook ein:testing-port notebook))
   (ein:log 'verbose
@@ -173,7 +173,7 @@ Make MAX-COUNT larger \(default 50) to wait longer before timeout."
      "ein:testing-get-untitled0-or-create"
      (lambda () (ein:aand (ein:$notebook-kernel notebook)
                           (ein:kernel-live-p it)))
-     nil 50)
+     nil)
     (with-current-buffer (ein:notebook-buffer notebook)
       (call-interactively #'ein:worksheet-insert-cell-below)
       (insert "a = 100\na")
@@ -214,8 +214,7 @@ See the definition of `create-image' for how it works."
         ;; before "execute reply" in this case.
         (ein:testing-wait-until "ein:worksheet-execute-cell"
                                 (lambda () (slot-value cell 'outputs))
-                                nil
-                                50)
+                                nil)
         ;; This cell has only one input
         (should (= (length (oref cell :outputs)) 1))
         ;; This output is a SVG image
@@ -259,7 +258,7 @@ See the definition of `create-image' for how it works."
      "ein:testing-get-untitled0-or-create"
      (lambda () (ein:aand (ein:$notebook-kernel notebook)
                           (ein:kernel-live-p it)))
-     nil 50)
+     nil)
     (with-current-buffer (ein:notebook-buffer notebook)
       (call-interactively #'ein:worksheet-insert-cell-below)
       (insert "range?")
@@ -267,7 +266,7 @@ See the definition of `create-image' for how it works."
         (ein:testing-wait-until
          "ein:worksheet-execute-cell"
          (lambda () (not (oref cell :running)))
-         nil 50))
+         nil))
       (with-current-buffer (get-buffer (ein:$notebook-pager notebook))
         (should (search-forward "Docstring:"))))))
 
