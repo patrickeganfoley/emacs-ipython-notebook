@@ -39,14 +39,14 @@
 
 (ert-deftest eintest:cell-input-prompt-number ()
   (ein:testing-with-one-cell
-   (ein:cell-from-json
-    (list :cell_type "code"
-          :source "some input"
-          :metadata (list :collapsed json-false :autoscroll json-false)
-          :execution_count 111)
-    :ewoc (oref ein:%worksheet% :ewoc))
-   (goto-char (ein:cell-location cell))
-   (should (looking-at "\
+      (ein:cell-from-json
+       (list :cell_type "code"
+             :source "some input"
+	     :metadata (list :collapsed json-false :autoscroll json-false)
+             :execution_count 111)
+       :ewoc (oref ein:%worksheet% :ewoc))
+    (goto-char (ein:cell-location cell))
+    (should (looking-at "\
 In \\[111\\]:
 some input
 "))))
@@ -82,9 +82,13 @@ some input
 ;; Insert pyout/display_data
 
 (defun eintest:cell-insert-output (outputs regexp)
-  (let ((ein:output-type-preference (reverse (if (functionp ein:output-type-preference)
-                                                 (funcall ein:output-type-preference nil)
-                                               ein:output-type-preference))))
+  (let ((ein:output-type-preference
+         '(emacs-lisp image/svg image/png jpeg text/plain text/html text/latex text/javascript)))
+    (message "%S" (list :cell_type "code"
+			:outputs outputs
+			:source "Some input"
+			:metadata (list :collapsed json-false :autoscroll json-false)
+			:execution_count 111))
     (ein:testing-with-one-cell
         (ein:cell-from-json
          (list :cell_type "code"
@@ -94,7 +98,6 @@ some input
                :execution_count 111)
          :ewoc (oref ein:%worksheet% :ewoc))
       (goto-char (ein:cell-location cell))
-      ;; (message "%s" (buffer-string))
       (should (looking-at (format "\
 In \\[111\\]:
 some input
@@ -111,9 +114,7 @@ some input
          (loop for i from 1
                for x in outputs
                collect
-               ;; ein:cell--handle-output doesn't get called
-               ;; so can't use :execution_count here although that is preferable
-               (append x (list :output_type "execute_result" :prompt_number i :metadata nil))))
+               (append x (list :output_type "execute_result" :execution_count i :metadata nil))))
         (outputs-display-data
          (mapcar (lambda (x) (append '(:output_type "display_data" :metadata nil) x))
                  outputs))
@@ -144,13 +145,13 @@ some input
 (when (image-type-available-p 'svg)
   (eintest:gene-test-cell-insert-output-pyout-and-display-data
    svg
-   ("some output text")
-   ((:data (:text/plain "some output text" :image/svg ein:testing-example-svg)))))
+   (" ")
+   ((:data (:text/plain "some output text" :svg ein:testing-example-svg)))))
 
 (eintest:gene-test-cell-insert-output-pyout-and-display-data
   html
   ("some output text")
-  ((:data (:text/plain "some output text" :text/html "<b>not shown</b>"))))
+  ((:data (:text/plain ("some output text") :text/html ("<b>not shown</b>")))))
 
 (eintest:gene-test-cell-insert-output-pyout-and-display-data
   javascript
@@ -160,7 +161,7 @@ some input
 (eintest:gene-test-cell-insert-output-pyout-and-display-data
   text-two
   ("first output text" "second output text")
-  ((:data (:text/plain "first output text")) (:data (:text/plain "second output text"))))
+  ((:data (:text/plain "first output text")) (:text/plain "second output text")))
 
 (eintest:gene-test-cell-insert-output-pyout-and-display-data
   text-javascript
@@ -171,7 +172,7 @@ some input
 (when (image-type-available-p 'svg)
   (eintest:gene-test-cell-insert-output-pyout-and-display-data
    text-latex-svg
-   ("first output text" "second output \\\\LaTeX" "some output text")
+   ("first output text" "second output \\\\LaTeX" " ")
    ((:data (:text/plain "first output text"))
     (:data (:text/latex "second output \\LaTeX"))
     (:data (:text/plain "some output text" :image/svg ein:testing-example-svg)))))
@@ -195,7 +196,7 @@ some traceback 2
 (ert-deftest ein:cell-insert-output-stream-simple-stdout ()
   (eintest:cell-insert-output
    (list (list :output_type "stream"
-               :stream "stdout"
+               :name "stdout"
                :text "some stdout 1"))
    "\
 some stdout 1
@@ -204,10 +205,10 @@ some stdout 1
 (ert-deftest ein:cell-insert-output-stream-stdout-stderr ()
   (eintest:cell-insert-output
    (list (list :output_type "stream"
-               :stream "stdout"
+               :name "stdout"
                :text "some stdout 1")
          (list :output_type "stream"
-               :stream "stderr"
+               :name "stderr"
                :text "some stderr 1"))
    "\
 some stdout 1
@@ -217,10 +218,10 @@ some stderr 1
 (ert-deftest ein:cell-insert-output-stream-flushed-stdout ()
   (eintest:cell-insert-output
    (list (list :output_type "stream"
-               :stream "stdout"
+               :name "stdout"
                :text "some stdout 1")
          (list :output_type "stream"
-               :stream "stdout"
+               :name "stdout"
                :text "some stdout 2"))
    "\
 some stdout 1some stdout 2
@@ -229,16 +230,16 @@ some stdout 1some stdout 2
 (ert-deftest ein:cell-insert-output-stream-flushed-stdout-and-stderr ()
   (eintest:cell-insert-output
    (list (list :output_type "stream"
-               :stream "stdout"
+               :name "stdout"
                :text "some stdout 1")
          (list :output_type "stream"
-               :stream "stderr"
+               :name "stderr"
                :text "some stderr 1")
          (list :output_type "stream"
-               :stream "stdout"
+               :name "stdout"
                :text "some stdout 2")
          (list :output_type "stream"
-               :stream "stderr"
+               :name "stderr"
                :text "some stderr 2"))
    "\
 some stdout 1

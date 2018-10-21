@@ -77,6 +77,9 @@
 ")
 
 
+(defun eintest:notebook-enable-mode (buffer)
+  (with-current-buffer buffer (ein:notebook-plain-mode) buffer))
+
 (defun eintest:kernel-fake-execute-reply (kernel msg-id execution-count)
   (let* ((payload nil)
          (content (list :execution_count 1 :payload payload))
@@ -132,26 +135,24 @@ is not found."
 (ert-deftest ein:notebook-from-json-empty ()
   (with-current-buffer (ein:testing-notebook-make-empty)
     (should (ein:$notebook-p ein:%notebook%))
-    (should (equal (ein:$notebook-notebook-name ein:%notebook%) ein:testing-notebook-dummy-name))
+    (should (equal (ein:$notebook-notebook-name ein:%notebook%) "Dummy Name.ipynb"))
     (should (equal (ein:worksheet-ncells ein:%worksheet%) 0))))
 
 (ert-deftest ein:notebook-from-json-all-cell-types ()
   (with-current-buffer
-      (ein:testing-notebook-make-new 
-       ein:testing-notebook-dummy-name
-       nil
-       (list (ein:testing-codecell-data "import numpy")
-             (ein:testing-markdowncell-data "*markdown* text")
-             (ein:testing-rawcell-data "`raw` cell text")
-             (ein:testing-htmlcell-data "<b>HTML</b> text")
-             (ein:testing-headingcell-data "Heading 1" 1)
-             (ein:testing-headingcell-data "Heading 2" 2)
-             (ein:testing-headingcell-data "Heading 3" 3)
-             (ein:testing-headingcell-data "Heading 4" 4)
-             (ein:testing-headingcell-data "Heading 5" 5)
-             (ein:testing-headingcell-data "Heading 6" 6)))
+      (ein:testing-notebook-make-new
+       nil (list (ein:testing-codecell-data "import numpy")
+                     (ein:testing-markdowncell-data "*markdown* text")
+                     (ein:testing-rawcell-data "`raw` cell text")
+                     (ein:testing-htmlcell-data "<b>HTML</b> text")
+                     (ein:testing-headingcell-data "Heading 1" 1)
+                     (ein:testing-headingcell-data "Heading 2" 2)
+                     (ein:testing-headingcell-data "Heading 3" 3)
+                     (ein:testing-headingcell-data "Heading 4" 4)
+                     (ein:testing-headingcell-data "Heading 5" 5)
+                     (ein:testing-headingcell-data "Heading 6" 6)))
     (should (ein:$notebook-p ein:%notebook%))
-    (should (equal (ein:$notebook-notebook-name ein:%notebook%) ein:testing-notebook-dummy-name))
+    (should (equal (ein:$notebook-notebook-name ein:%notebook%) "Dummy Name.ipynb"))
     (should (equal (ein:worksheet-ncells ein:%worksheet%) 10))
     (let ((cells (ein:worksheet-get-cells ein:%worksheet%)))
       (should (ein:codecell-p     (nth 0 cells)))
@@ -342,16 +343,15 @@ some text
     (call-interactively #'ein:worksheet-toggle-cell-type)
     (should (ein:rawcell-p (ein:worksheet-get-current-cell)))
     (should (looking-back "some text"))
-    (when (< (ein:$notebook-nbformat ein:%notebook%) 4)
-      ;; toggle to heading
-      (call-interactively #'ein:worksheet-toggle-cell-type)
-      (should (ein:headingcell-p (ein:worksheet-get-current-cell)))
-      (should (looking-back "some text"))
-      ;; toggle to code
-      (call-interactively #'ein:worksheet-toggle-cell-type)
-      (should (ein:codecell-p (ein:worksheet-get-current-cell)))
-      (should (slot-boundp (ein:worksheet-get-current-cell) :kernel))
-      (should (looking-back "some text")))))
+    ;; toggle to heading
+    (call-interactively #'ein:worksheet-toggle-cell-type)
+    (should (ein:headingcell-p (ein:worksheet-get-current-cell)))
+    (should (looking-back "some text"))
+    ;; toggle to code
+    (call-interactively #'ein:worksheet-toggle-cell-type)
+    (should (ein:codecell-p (ein:worksheet-get-current-cell)))
+    (should (slot-boundp (ein:worksheet-get-current-cell) :kernel))
+    (should (looking-back "some text"))))
 
 (ert-deftest ein:notebook-change-cell-type-cycle-through ()
   (with-current-buffer (ein:testing-notebook-make-empty)
@@ -887,25 +887,22 @@ defined."
 (ert-deftest ein:notebook-close/one-ws-five-ss ()
   (ein:testin-notebook-close 1 5))
 
-(defun ein:testing-notebook-data-assert-nb3-worksheet-contents (notebook &optional text)
+(defun ein:testing-notebook-data-assert-one-worksheet-one-cell (notebook text)
+  (let* ((data (ein:notebook-to-json notebook))
+         (worksheets (assoc-default 'worksheets data #'eq))
+         (cells (assoc-default 'cells (elt worksheets 0) #'eq))
+         (cell-0 (elt cells 0))
+         (input (assoc-default 'input cell-0 #'eq)))
+    (should (= (length worksheets) 1))
+    (should (= (length cells) 1))
+    (should (equal input text))))
+
+(defun ein:testing-notebook-data-assert-one-worksheet-no-cell (notebook)
   (let* ((data (ein:notebook-to-json notebook))
          (worksheets (assoc-default 'worksheets data #'eq))
          (cells (assoc-default 'cells (elt worksheets 0) #'eq)))
     (should (= (length worksheets) 1))
-    (if text
-        (let ((cell-0 (elt cells 0))
-              (input (assoc-default 'input cell-0 #'eq)))
-          (should (equal input text)))
-      (should (= (length cells) 0)))))
-
-(defun ein:testing-notebook-data-assert-nb4-worksheet-contents (notebook &optional text)
-  (let* ((data (ein:notebook-to-json notebook))
-         (cells (assoc-default 'cells data #'eq)))
-    (if text
-        (progn
-          (should (= (length cells) 1))
-          (should (equal (assoc-default 'source (elt cells 0) #'eq) text)))
-      (should (zerop (length cells))))))
+    (should (= (length cells) 0))))
 
 (ert-deftest ein:notebook-to-json-after-closing-a-worksheet ()
   (with-current-buffer (ein:testing-notebook-make-new)
@@ -914,9 +911,8 @@ defined."
       ;; Edit notebook.
       (ein:cell-goto (ein:get-cell-at-point))
       (insert "some text")
-      (if (< (ein:$notebook-nbformat notebook) 4)
-          (ein:testing-notebook-data-assert-nb3-worksheet-contents notebook "some text")
-        (ein:testing-notebook-data-assert-nb4-worksheet-contents notebook "some text"))
+      (ein:testing-notebook-data-assert-one-worksheet-one-cell notebook
+                                                               "some text")
       (should (ein:notebook-modified-p notebook))
       ;; Open scratch sheet.
       (ein:notebook-scratchsheet-open notebook)
@@ -927,9 +923,8 @@ defined."
       (kill-buffer buffer)
       (should (ein:notebook-live-p notebook))
       ;; to-json should still work
-      (if (< (ein:$notebook-nbformat notebook) 4)
-          (ein:testing-notebook-data-assert-nb3-worksheet-contents notebook "some text")
-        (ein:testing-notebook-data-assert-nb4-worksheet-contents notebook "some text")))))
+      (ein:testing-notebook-data-assert-one-worksheet-one-cell notebook
+                                                               "some text"))))
 
 (ert-deftest ein:notebook-to-json-after-discarding-a-worksheet ()
   (with-current-buffer (ein:testing-notebook-make-new)
@@ -938,9 +933,8 @@ defined."
       ;; Edit notebook.
       (ein:cell-goto (ein:get-cell-at-point))
       (insert "some text")
-      (if (< (ein:$notebook-nbformat notebook) 4)
-          (ein:testing-notebook-data-assert-nb3-worksheet-contents notebook "some text")
-        (ein:testing-notebook-data-assert-nb4-worksheet-contents notebook "some text"))
+      (ein:testing-notebook-data-assert-one-worksheet-one-cell notebook
+                                                               "some text")
       (should (ein:notebook-modified-p notebook))
       ;; Open scratch sheet.
       (ein:notebook-scratchsheet-open notebook)
@@ -950,9 +944,7 @@ defined."
         (kill-buffer buffer))
       (should (ein:notebook-live-p notebook))
       ;; to-json should still work
-      (if (< (ein:$notebook-nbformat notebook) 4)
-          (ein:testing-notebook-data-assert-nb3-worksheet-contents notebook)
-        (ein:testing-notebook-data-assert-nb4-worksheet-contents notebook)))))
+      (ein:testing-notebook-data-assert-one-worksheet-no-cell notebook))))
 
 (defun ein:testing-notebook-should-be-closed (notebook buffer)
   (should-not (buffer-live-p buffer))
@@ -1002,18 +994,19 @@ defined."
       (call-interactively #'ein:worksheet-insert-cell-above)
       (call-interactively #'ein:worksheet-goto-next-input)
       (should (equal (ein:cell-get-text (ein:worksheet-get-current-cell)) text))
-      (if ein:worksheet-enable-undo
+      (if (eq ein:worksheet-enable-undo 'full)
           (undo)
         (should-error (undo)))
-      (when ein:worksheet-enable-undo
-        (should (equal (buffer-string) "
+      (when (eq ein:worksheet-enable-undo 'full)
+        ;; FIXME: Known bug. (this must succeed.)
+        (should-error (should (equal (buffer-string) "
 In [ ]:
 
 
 In [ ]:
 
 
-"))))))
+")))))))
 
 (defun eintest:notebook-undo-after-split ()
   (with-current-buffer (ein:testing-notebook-make-empty)
@@ -1027,10 +1020,10 @@ In [ ]:
       (undo-boundary)
       (should (equal (ein:cell-get-text (ein:worksheet-get-current-cell))
                      line-2))
-      (if ein:worksheet-enable-undo
+      (if (eq ein:worksheet-enable-undo 'full)
           (undo)
         (should-error (undo)))
-      (when ein:worksheet-enable-undo
+      (when (eq ein:worksheet-enable-undo 'full)
         (should (equal (buffer-string) "
 In [ ]:
 
@@ -1066,7 +1059,7 @@ second line
 
       (should (equal (ein:cell-get-text (ein:worksheet-get-current-cell))
                      (concat line-1 "\n" line-2)))
-      (if (not ein:worksheet-enable-undo)
+      (if (not (eq ein:worksheet-enable-undo 'full))
           (should-error (undo))
         (undo)
         (should (equal (buffer-string) "
@@ -1079,9 +1072,14 @@ In [ ]:
 In [ ]:
 
 
-"))
-        (undo-more 1)
-        (should (equal (buffer-string) "
+")))
+      (when (eq ein:worksheet-enable-undo 'yes)
+        ;; FIXME: `undo' should work...
+        (should-error (undo-more 1)))
+      (when (eq ein:worksheet-enable-undo 'full)
+        (undo)
+        ;; FIXME: Known bug... What should the result be?
+        (should-error (should (equal (buffer-string) "
 In [ ]:
 
 
@@ -1091,7 +1089,7 @@ In [ ]:
 In [ ]:
 
 
-"))))))
+")))))))
 
 (defun eintest:notebook-undo-after-execution-1-cell ()
   (with-current-buffer (ein:testing-notebook-make-empty)
@@ -1116,12 +1114,13 @@ In [ ]:
       (funcall check-output)
       ;; Undo
       (should (equal (ein:cell-get-text cell) text))
-      (if ein:worksheet-enable-undo
+      (if (eq ein:worksheet-enable-undo 'full)
           (undo)
         (should-error (undo)))
-      (when ein:worksheet-enable-undo
+      (when (eq ein:worksheet-enable-undo 'full)
         (should (equal (ein:cell-get-text cell) ""))
-        (should (funcall check-output))))))
+        ;; FIXME: Known bug. (it must succeed.)
+        (should-error (funcall check-output))))))
 
 (defun eintest:notebook-undo-after-execution-2-cells ()
   (with-current-buffer (ein:testing-notebook-make-empty)
@@ -1157,29 +1156,33 @@ In [ ]:
       ;; Undo
       (should (equal (ein:cell-get-text cell) text))
       (should (equal (ein:cell-get-text next-cell) next-text))
-      (if ein:worksheet-enable-undo
+      (if (eq ein:worksheet-enable-undo 'full)
           (undo)
         (should-error (undo)))
-      (when ein:worksheet-enable-undo
+      (when (eq ein:worksheet-enable-undo 'full)
         (should (equal (ein:cell-get-text cell) text))
-        (should (equal (ein:cell-get-text next-cell) ""))
-        (should (funcall check-output))))))
+        ;; FIXME: Known bug. (these two must succeed.)
+        (should-error (should (equal (ein:cell-get-text next-cell) "")))
+        (should-error (funcall check-output))))))
 
 (defmacro eintest:notebook-undo-make-tests (name)
-  "Define two tests ein:NANE/no, ein:NANE/yes
-from a function named eintest:NAME where `no'/`yes' is the
+  "Define three tests ein:NANE/no, ein:NANE/yes and ein:NANE/full
+from a function named eintest:NAME where `no'/`yes'/`full' is the
 value of `ein:worksheet-enable-undo'."
   (let ((func (intern (format "eintest:%s" name)))
         (test/no (intern (format "ein:%s/no" name)))
-        (test/yes (intern (format "ein:%s/yes" name))))
+        (test/yes (intern (format "ein:%s/yes" name)))
+        (test/full (intern (format "ein:%s/full" name))))
     `(progn
        (ert-deftest ,test/no ()
-         (let ((ein:worksheet-enable-undo nil))
+         (let ((ein:worksheet-enable-undo 'no))
            (,func)))
        (ert-deftest ,test/yes ()
-         (let ((ein:worksheet-enable-undo t))
+         (let ((ein:worksheet-enable-undo 'yes))
            (,func)))
-       )))
+       (ert-deftest ,test/full ()
+         (let ((ein:worksheet-enable-undo 'full))
+           (,func))))))
 
 (eintest:notebook-undo-make-tests notebook-undo-after-insert-above)
 (eintest:notebook-undo-make-tests notebook-undo-after-split)
@@ -1187,12 +1190,26 @@ value of `ein:worksheet-enable-undo'."
 (eintest:notebook-undo-make-tests notebook-undo-after-execution-1-cell)
 (eintest:notebook-undo-make-tests notebook-undo-after-execution-2-cells)
 
+(ert-deftest ein:notebook-undo-via-events ()
+  (with-current-buffer (ein:testing-notebook-make-empty)
+    (call-interactively #'ein:worksheet-insert-cell-below)
+    (loop with events = (ein:$notebook-events ein:%notebook%)
+          for ein:worksheet-enable-undo in '(no yes full) do
+          (let ((buffer-undo-list '(dummy))
+                (cell (ein:worksheet-get-current-cell)))
+            (with-temp-buffer
+              (should-not (equal buffer-undo-list '(dummy)))
+              (ein:events-trigger events 'maybe_reset_undo.Worksheet cell))
+            (if (eq ein:worksheet-enable-undo 'yes)
+                (should (equal buffer-undo-list nil))
+              (should (equal buffer-undo-list '(dummy))))))))
+
 
 ;; Generic getter
 
 (ert-deftest ein:get-url-or-port--notebook ()
   (with-current-buffer (ein:testing-notebook-make-empty)
-    (should (equal (ein:get-url-or-port) ein:testing-notebook-dummy-url))))
+    (should (equal (ein:get-url-or-port) "DUMMY-URL"))))
 
 (ert-deftest ein:get-notebook--notebook ()
   (with-current-buffer (ein:testing-notebook-make-empty)
@@ -1221,20 +1238,23 @@ value of `ein:worksheet-enable-undo'."
   (let ((ein:notebook--opened-map (make-hash-table :test 'equal)))
     (should (ein:notebook-ask-before-kill-emacs))
     (with-current-buffer
-        (ein:testing-notebook-make-empty "Modified Notebook.ipynb")
+        (eintest:notebook-enable-mode
+         (ein:testing-notebook-make-empty "Modified Notebook.ipynb"))
       (call-interactively #'ein:worksheet-insert-cell-below)
       (should (ein:notebook-modified-p)))
     (with-current-buffer
-        (ein:testing-notebook-make-empty "Saved Notebook.ipynb")
+        (eintest:notebook-enable-mode
+         (ein:testing-notebook-make-empty "Saved Notebook.ipynb"))
       (ein:notebook-save-notebook-success ein:%notebook%)
       (should-not (ein:notebook-modified-p)))
     (flet ((y-or-n-p (&rest ignore) t)
            (ein:notebook-del (&rest ignore)))
       (kill-buffer
-       (ein:testing-notebook-make-empty "Killed Notebook.ipynb")))
-    (should (gethash `(,ein:testing-notebook-dummy-url "Modified Notebook.ipynb") ein:notebook--opened-map))
-    (should (gethash `(,ein:testing-notebook-dummy-url "Saved Notebook.ipynb") ein:notebook--opened-map))
-    (should (gethash `(,ein:testing-notebook-dummy-url "Killed Notebook.ipynb") ein:notebook--opened-map))
+       (eintest:notebook-enable-mode
+        (ein:testing-notebook-make-empty "Killed Notebook.ipynb"))))
+    (should (gethash '("DUMMY-URL" "Modified Notebook.ipynb") ein:notebook--opened-map))
+    (should (gethash '("DUMMY-URL" "Saved Notebook.ipynb") ein:notebook--opened-map))
+    (should (gethash '("DUMMY-URL" "Killed Notebook.ipynb") ein:notebook--opened-map))
     (should (= (hash-table-count ein:notebook--opened-map) 3))
     (mocker-let ((y-or-n-p
                   (prompt)
@@ -1260,7 +1280,7 @@ value of `ein:worksheet-enable-undo'."
     (call-interactively #'ein:worksheet-insert-cell-below)
     (mocker-let ((y-or-n-p
                   (prompt)
-                  ((:input '("This notebook has unsaved changes. Discard those changes?")
+                  ((:input '("You have unsaved changes. Discard changes?")
                            :output t))))
       (should (ein:notebook-ask-before-kill-buffer)))))
 

@@ -10,7 +10,6 @@
 
 
 (ert-deftest ein:pytools-finish-tooltip ()
-  :expected-result :failed
   (ein:testing-kernel-construct-help-string-loop
    (lambda (content result)
      (if result

@@ -32,7 +32,6 @@
 (declare-function ses-command-hook "ses")
 
 (require 'ein-kernel)
-(require 'ein-notebook)
 
 (defun ein:goto-file (filename lineno &optional other-window)
   "Jump to file FILEAME at line LINENO.
@@ -364,7 +363,7 @@ Currently EIN/IPython supports exporting to the following formats:
           (json-pretty-print (point-min) (point-max)))
       (ein:kernel-request-stream
        (ein:get-kernel)
-       (format "__import__('ein').export_nb(r'%s', '%s')"
+       (format "__import__('ein').export_nb('%s', '%s')"
                json
                format)
        (lambda (export buffer)

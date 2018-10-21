@@ -26,7 +26,7 @@
 ;;; Code:
 
 (eval-when-compile (require 'cl))
-(require 'auto-complete)
+(require 'auto-complete nil t)
 
 (require 'ein-core)
 (eval-when-compile (require 'ein-notebook)
@@ -81,18 +81,18 @@
 (defun ein:ac-direct-get-matches ()
  (ein:ac-chunk-candidates-from-list ein:ac-direct-matches))
 
-(ac-define-source ein-direct
-  '((candidates . ein:ac-direct-get-matches)
-    (requires . 0)
-    (prefix . ein:ac-chunk-beginning)
-    (symbol . "s")))
+(eval '(ac-define-source ein-direct
+                         '((candidates . ein:ac-direct-get-matches)
+                           (requires . 0)
+                           (prefix . ein:ac-chunk-beginning)
+                           (symbol . "s"))))
 
-(ac-define-source ein-async
-  '((candidates . ein:ac-direct-get-matches)
-    (requires . 0)
-    (prefix . ein:ac-chunk-beginning)
-    (init . ein:ac-request-in-background)
-    (symbol . "c")))
+(eval '(ac-define-source ein-async
+                         '((candidates . ein:ac-direct-get-matches)
+                           (requires . 0)
+                           (prefix . ein:ac-chunk-beginning)
+                           (init . ein:ac-request-in-background)
+                           (symbol . "c"))))
 
 (define-obsolete-function-alias 'ac-complete-ein-cached 'ac-complete-ein-async
   "0.2.1")

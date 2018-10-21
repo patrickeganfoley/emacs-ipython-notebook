@@ -1,40 +1,25 @@
-sudo: false
 language: python
-
 addons:
   apt:
     packages:
     - gnutls-bin
-    - sharutils
-
-cache:
-  directories:
-  - $HOME/local
-
+    - libssl-dev
 python:
   - "2.7"
+  - "3.5"
   - "3.6"
-
-env:
-  global:
-    - PATH=$HOME/local/bin:$HOME/local/evm/bin:$HOME/local/cask/bin:$PATH
-  matrix:
-    - EVM_EMACS=emacs-25.2-travis EL_REQUEST_BACKEND=curl
-    - EVM_EMACS=emacs-26.1-travis EL_REQUEST_BACKEND=curl
-
-matrix:
-  allow_failures:
-    - env: EVM_EMACS=emacs-snapshot
-
-install:
-  - pip install jupyter ipython\<=6.4.0
-  - jupyter kernelspec list
-
-before_script:
-  - sh tools/install-evm.sh
+before_install:
+  - curl -fsSkL https://gist.github.com/rejeep/ebcd57c3af83b049833b/raw > x.sh && source ./x.sh
   - evm install $EVM_EMACS --use --skip
-  - emacs --version
-  - sh tools/install-cask.sh
-
+  - evm list
+  - cask install
+install:
+  - pip install tornado
+  - pip install jupyter==$JUPYTER
+env:
+  - EVM_EMACS=emacs-25.2-travis JUPYTER=1.0.0
+  - EVM_EMACS=emacs-26-pretest-travis JUPYTER=1.0.0
 script:
-  - make test || ( ( zip -q - log/{testein,testfunc,ecukes}.* 2>/dev/null | uuencode log.zip ) && false )
+  - emacs --version
+  - jupyter notebook --version
+  - cask exec ert-runner

@@ -28,8 +28,6 @@
 (require 'smartrep nil t)
 (require 'ein-notebook)
 
-(autoload 'smartrep-define-key "smartrep")
-
 (defcustom ein:smartrep-notebook-mode-alist
   '(("C-t" . ein:worksheet-toggle-cell-type)
     ("C-l" . ein:worksheet-clear-output)
@@ -41,9 +39,9 @@
     ("C-p" . ein:worksheet-goto-prev-input)
     ("C-m" . ein:worksheet-merge-cell)
     ("<up>" . ein:worksheet-move-cell-up)
-    ("<down>" . ein:worksheet-move-cell-down))
+    ("<down>" . ein:worksheet-move-cell-down)
+    )
   "alist passed to `smartrep-define-key'."
-  :type '(repeat (cons string function))
   :group 'ein)
 
 (defun ein:smartrep-config ()

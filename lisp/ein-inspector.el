@@ -1,4 +1,3 @@
-;;; -*- mode: emacs-lisp; lexical-binding: t -*-
 ;;; ein-inspector.el --- An inspector, in emacs, for Python
 
 ;; Copyright (C) 2017 - John Miller
@@ -24,8 +23,6 @@
 ;;; Commentary:
 
 ;;; Code:
-
-(require 'ein-pytools)
 
 ;;;###autoload
 (defun ein:inspect-object (kernel object)

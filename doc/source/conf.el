@@ -21,7 +21,6 @@
 (package-initialize)
 (require 'ein-dev)
 (ein:dev-require-all)
-(require 'ob-ein)
 
 ;; Load `wid-edit'.  Otherwise the following error will be raised:
 ;;    Symbol's function definition is void: widget-button-press

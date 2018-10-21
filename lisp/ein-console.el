@@ -151,8 +151,7 @@ See also: `ein:console-security-dir'."
     (file-name-as-directory (expand-file-name dir)))))
 
 (defun ein:console-executable-get (url-or-port)
-  (or (ein:choose-setting 'ein:console-executable url-or-port)
-      (error "Cannot find console executable!")))
+  (ein:choose-setting 'ein:console-executable url-or-port))
 
 (defun ein:console-args-get (url-or-port)
   (ein:choose-setting 'ein:console-args url-or-port
@@ -161,14 +160,11 @@ See also: `ein:console-security-dir'."
                             (and (listp x)
                                  (stringp (car x)))))))
 
-(defun ein:ensure-url-or-port ()
-  (or (ein:get-url-or-port)
-      (error "Cannot find notebook to connect!")))
-
 (defun ein:console-make-command ()
   ;; FIXME: use %connect_info to get connection file, then I can get
   ;; rid of `ein:console-security-dir'.
-  (let* ((url-or-port (ein:ensure-url-or-port))
+  (let* ((url-or-port (or (ein:get-url-or-port)
+                          (error "Cannot find notebook to connect!")))
          (dir (ein:console-security-dir-get url-or-port))
          (kid (ein:kernel-id (ein:get-kernel)))
          (ipy (ein:console-executable-get url-or-port))
@@ -203,7 +199,8 @@ It should be possible to support python-mode.el.  Patches are welcome!
   (interactive)
   ;; FIXME: Workaround for running current version of Jupyter console on windows
   (when (eql system-type 'windows-nt)
-    (if (string-match-p "jupyter" (ein:console-executable-get (ein:ensure-url-or-port)))
+    (if (string-match-p "jupyter" (ein:console-executable-get (or (ein:get-url-or-port)
+                                                                  (error "Cannot find notebook to connect!"))))
         (setenv "JUPYTER_CONSOLE_TEST" "1")
       (setenv "IPY_TEST_SIMPLE_PROMPT" "1")))
   (if (fboundp 'python-shell-switch-to-shell)

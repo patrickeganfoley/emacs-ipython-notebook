@@ -31,36 +31,36 @@
 (require 'ein-notebook)
 (require 'ein-testing-cell)
 
-(defvar ein:testing-notebook-dummy-name "Dummy Name.ipynb")
-(defvar ein:testing-notebook-dummy-url "DUMMY-URL")
-
-(defun ein:testing-notebook-from-json (json-string)
+(defun ein:testing-notebook-from-json (json-string &optional name path)
   (let* ((data (ein:json-read-from-string json-string))
+         (name (plist-get data :name))
          (path (plist-get data :path))
-         (kernelspec (make-ein:$kernelspec :name "python3" :language "python"))
-         (content (make-ein:$content :url-or-port ein:testing-notebook-dummy-url
+         (kernelspec (make-ein:$kernelspec :name "python3"))
+         (content (make-ein:$content :url-or-port "DUMMY-URL"
                                      :ipython-version 3
                                      :path path)))
-    ;; using dynamically scoped flet instead of cl-flet, where
-    ;; "bindings are lexical... all references to the named functions
-    ;; must appear physically within the body of the cl-flet"
-    (flet ((pop-to-buffer (buf) buf)
-           (ein:need-ipython-version (url-or-port) 3)
-           (ein:notebook-start-kernel (notebook))
-           (ein:notebook-enable-autosaves (notebook)))
-      (let ((notebook (ein:notebook-new ein:testing-notebook-dummy-url path kernelspec)))
+    (unless name (setq name "NOTEBOOK-DUMMY"))
+    (unless path (setq path "NOTEBOOK-DUMMY"))
+    ;; cl-flet does not work correctly here!
+    (cl-flet ((pop-to-buffer (buf)
+                          buf)
+           (ein:query-ipython-version (&optional url-or-port force)
+                                      3)
+           (ein:notebook-start-kernel (notebook)
+                                      notebook))
+      (let ((notebook (ein:notebook-new "DUMMY-URL" path kernelspec)))
         (setf (ein:$notebook-kernel notebook)
-              (ein:kernel-new 8888 "/kernels" (ein:$notebook-events notebook) (ein:need-ipython-version (ein:$notebook-url-or-port notebook))))
+              (ein:kernel-new 8888 "/kernels" (ein:$notebook-events notebook) (ein:query-ipython-version)))
         (setf (ein:$kernel-events (ein:$notebook-kernel notebook))
               (ein:events-new))
-        ; matryoshka: new-content makes a ein:$content using CONTENT as template 
-        ; populating its raw_content field with DATA's content field
-        (ein:notebook-request-open-callback notebook (ein:new-content (ein:$notebook-url-or-port notebook) (ein:$notebook-notebook-path notebook) data))
+        (ein:notebook-request-open-callback notebook (ein:new-content content nil :data data))
         (ein:notebook-buffer notebook)))))
 
-(defun ein:testing-notebook-make-data (name path cells)
+(defun ein:testing-notebook-make-data (cells &optional name path)
   (setq cells
         (ein:testing-notebook--preprocess-cells-data-for-json-encode cells))
+  (unless name (setq name "Dummy Name.ipynb"))
+  (unless path (setq path "Dummy Name.ipynb"))
   `((path . ,path)
     (name . ,name)
     (type . "notebook")
@@ -82,30 +82,27 @@
              (t c)))
           cells))
 
-(defun ein:testing-notebook-make-new (&optional name path cells)
+(defun ein:testing-notebook-make-new (&optional name cells-data)
   "Make new notebook.  One empty cell will be inserted
-automatically if CELLS is nil."
+automatically if CELLS-DATA is nil."
   (ein:testing-notebook-from-json
-   (json-encode (ein:testing-notebook-make-data 
-                 (or name ein:testing-notebook-dummy-name) 
-                 (or path name ein:testing-notebook-dummy-name)
-                 cells))))
+   (json-encode (ein:testing-notebook-make-data cells-data name))))
 
-(defun ein:testing-notebook-make-empty (&optional name path)
+(defun ein:testing-notebook-make-empty (&optional name)
   "Make empty notebook and return its buffer.
 Automatically inserted cell for new notebook is deleted."
-  (let ((buffer (ein:testing-notebook-make-new name path)))
+  (let ((buffer (ein:testing-notebook-make-new name)))
     (with-current-buffer buffer
       (call-interactively #'ein:worksheet-delete-cell))
     buffer))
 
-(defmacro ein:testing-with-one-cell (type-or-cell &rest body)
-  "Insert new cell of TYPE-OR-CELL in a clean notebook and execute BODY.
+(defmacro ein:testing-with-one-cell (cell-type &rest body)
+  "Insert new cell of CELL-TYPE in a clean notebook and execute BODY.
 The new cell is bound to a variable `cell'."
   (declare (indent 1))
   `(with-current-buffer (ein:testing-notebook-make-empty)
      (let ((cell (ein:worksheet-insert-cell-below ein:%worksheet%
-                                                  ,type-or-cell nil t)))
+                                                  ,cell-type nil t)))
        ,@body)))
 
 (defun ein:testing-make-notebook-with-outputs (list-outputs)
@@ -113,8 +110,8 @@ The new cell is bound to a variable `cell'."
 LIST-OUTPUTS is a list of list of strings (pyout text).  Number
 of LIST-OUTPUTS equals to the number cells to be contained in the
 notebook."
-  (ein:testing-notebook-make-new 
-   ein:testing-notebook-dummy-name nil
+  (ein:testing-notebook-make-new
+   nil
    (mapcar (lambda (outputs)
              (ein:testing-codecell-data
               nil nil (mapcar #'ein:testing-codecell-pyout-data outputs)))

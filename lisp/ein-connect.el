@@ -31,11 +31,9 @@
 ;;; Code:
 
 (require 'eieio)
-(require 'company nil t)
-(require 'ein-notebook)
-(eval-when-compile (require 'auto-complete))
+(eval-when-compile (require 'auto-complete nil t))
 
-(autoload 'company-mode "company")
+(require 'ein-notebook)
 
 (declare-function ein:notebooklist-list-notebooks "ein-notebooklist")
 (declare-function ein:notebooklist-open-notebook-global "ein-notebooklist")
@@ -182,7 +180,7 @@ notebooks."
      (ein:notebooklist-list-notebooks))))
   (ein:notebooklist-open-notebook-global
    nbpath
-   (lambda (notebook created buffer no-reconnection)
+   (lambda (notebook -ignore- buffer no-reconnection)
      (ein:connect-buffer-to-notebook notebook buffer no-reconnection))
    (list (or buffer (current-buffer)) no-reconnection)))
 
@@ -191,10 +189,9 @@ notebooks."
   "Connect any buffer to opened notebook and its kernel."
   (interactive (list (completing-read "Notebook buffer to connect: "
                                       (ein:notebook-opened-buffer-names))))
-  (ein:aif (get-buffer buffer-or-name)
-      (let ((notebook (buffer-local-value 'ein:%notebook% it)))
-        (ein:connect-buffer-to-notebook notebook))
-    (error "No buffer %s" buffer-or-name)))
+  (let ((notebook
+         (buffer-local-value 'ein:%notebook% (get-buffer buffer-or-name))))
+    (ein:connect-buffer-to-notebook notebook)))
 
 ;;;###autoload
 (defun ein:connect-buffer-to-notebook (notebook &optional buffer
@@ -224,13 +221,8 @@ notebooks."
   "Evaluate the whole buffer.  Note that this will run the code
 inside the ``if __name__ == \"__main__\":`` block."
   (interactive)
-  (deferred:$
-    (deferred:next
-      (lambda ()
-        (ein:shared-output-eval-string (buffer-string) nil nil nil :silent t)))
-    (deferred:nextc it
-      (lambda ()
-        (ein:connect-execute-autoexec-cells))))
+  (ein:shared-output-eval-string (buffer-string) nil nil nil :silent t)
+  (ein:connect-execute-autoexec-cells)
   (ein:log 'info "Whole buffer is sent to the kernel."))
 
 (defun ein:connect-run-buffer (&optional ask-command)
@@ -243,7 +235,7 @@ Variable `ein:connect-run-command' sets the default command."
              (command (if ask-command
                           (read-from-minibuffer "Command: " default-command)
                         default-command))
-             (cmd (format "%s \"%s\"" command it)))
+             (cmd (format "%s %s" command it)))
         (if (ein:maybe-save-buffer ein:connect-save-before-run)
             (progn
               (ein:shared-output-eval-string cmd nil nil nil :silent t)
@@ -406,12 +398,9 @@ notebook."
                         (auto-complete-mode +1))
     (ein:use-ac-jedi-backend (ein:jedi-complete-on-dot-install ein:connect-mode-map)
                              (auto-complete-mode +1))
-    (ein:use-company-backend (company-mode +1)
-                             (when (boundp 'company-backends)
-                               (add-to-list 'company-backends 'ein:company-backend)))
-    (ein:use-company-jedi-backend (company-mode +1)
-                                  (when (boundp 'company-backends)
-                                    (add-to-list 'company-backends 'ein:company-backend)))
+    (ein:use-company-backend (company-mode +1))
+    (ein:use-company-jedi-backend (warn "Support for jedi+company currently not implemented. Defaulting to just company-mode")
+                                  (company-mode +1))
 
     (t (warn "No autocompletion backend has been selected - see `ein:completion-backend'."))))
 

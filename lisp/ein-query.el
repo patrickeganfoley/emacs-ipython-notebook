@@ -128,8 +128,7 @@ _xsrf argument."
          (cookies (request-cookie-alist (url-host parsed-url)
                                        "/" securep)))
     (ein:aif (assoc-string "_xsrf" cookies)
-        (setq settings (plist-put settings :headers (append (plist-get settings :headers)
-                                                            (list (cons "X-XSRFTOKEN" (cdr it)))))))
+        (setq settings (plist-put settings :headers (list (cons "X-XSRFTOKEN" (cdr it))))))
     (ein:aif (ein:jupyterhub-url-p (format "http://%s:%s" (url-host parsed-url) (url-port parsed-url)))
         (progn
           (unless (string-equal (ein:$jh-conn-url it)
@@ -145,15 +144,6 @@ _xsrf argument."
                                                                                     (ein:$jh-conn-token it))))))))))
     settings))
 
-(defcustom ein:max-simultaneous-queries 100
-  "Limit number of simultaneous queries to Jupyter server.
-
-If too many calls to `request' are made at once Emacs may
-complaint and raise a 'Too Many Files' exception. By setting this
-variable to a reasonable value you can avoid this situation."
-  :group 'ein
-  :type 'integer)
-
 (defun* ein:query-singleton-ajax (key url &rest settings
                                       &key
                                       (timeout ein:query-timeout)
@@ -165,23 +155,9 @@ KEY, then call `request' with URL and SETTINGS.  KEY is compared by
     (ein:query-gc-running-process-table)
     (when timeout
       (setq settings (plist-put settings :timeout (/ timeout 1000.0))))
-    (when (>= (hash-table-count ein:query-running-process-table)
-             ein:max-simultaneous-queries)
-      (let ((loopcnt 0))
-        (loop until (or (< (hash-table-count ein:query-running-process-table) ein:max-simultaneous-queries)
-                        (> loopcnt 10))
-              do (progn
-                   (incf loopcnt)
-                   (ein:query-gc-running-process-table)
-                   (ein:log 'debug "Stuck waiting for %s processes to complete."
-                            (hash-table-count ein:query-running-process-table))
-                   (sleep-for 3)))))
-    (ein:log 'debug "Currently at %s simultaneous request calls." (hash-table-count ein:query-running-process-table))
     (ein:aif (gethash key ein:query-running-process-table)
         (unless (request-response-done-p it)
-          ;; This seems to result in clobbered cookie jars
-          ;;(request-abort it) ; This will run callbacks
-          (ein:log 'info "Race! %s %s" key (request-response-data it))))
+          (request-abort it)))            ; This will run callbacks
     (let ((response (apply #'request (url-encode-url (ein:jupyterhub-correct-query-url-maybe url))
                            (ein:query-prepare-header url settings))))
       (puthash key response ein:query-running-process-table)

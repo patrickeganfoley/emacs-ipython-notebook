@@ -1,4 +1,4 @@
-;;; ein-hy.el --- Hylang Support -*- lexical-binding: t; -*-
+;;; ein-hy.el --- Hylang Support-*- lexical-binding: t; -*-
 
 ;; (C) 2018 - John M. Miller
 
@@ -45,8 +45,8 @@ Called from ewoc pretty printer via `ein:cell-pp'."
   (setf (slot-value cell 'dynamic) t)
   (apply #'ein:kernel-execute kernel (ein:pytools-wrap-hy-code code) (ein:cell-make-callbacks cell) args))
 
-(defmethod ein:cell-to-nb4-json :before ((cell ein:hy-codecell) _ &optional _ignore)
+(defmethod ein:cell-to-nb4-json :before ((cell ein:hy-codecell) _ &optional _)
   (let ((metadata (slot-value cell 'metadata)))
-    (setf metadata (plist-put metadata :ein.hycell t))))
+    (setf metadata (plist-put metadata :ein.hy_cell t))))
 
 (provide 'ein-hy)

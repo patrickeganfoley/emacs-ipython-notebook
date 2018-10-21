@@ -25,14 +25,6 @@
 
 ;;; Code:
 (require 'ein-cell)
-(require 'ess-r-mode nil t)
-(require 'org-src nil t)
-(require 'markdown-mode nil t)
-
-(autoload 'markdown-mode "markdown-mode")
-(autoload 'R-mode "ess-r-mode")
-(autoload 'org-src--remove-overlay "org-src")
-(autoload 'org-src-switch-to-buffer "org-src")
 
 (defvar ein:src--cell nil)
 (defvar ein:src--ws nil)
@@ -85,7 +77,7 @@ or abort with \\[ein:edit-cell-abort]"))
   )
 
 (defun ein:cell-configure-edit-buffer ()
-  (when (and (bound-and-true-p org-src--from-org-mode) (boundp 'org-src--beg-marker))
+  (when (bound-and-true-p org-src--from-org-mode)
     (add-hook 'kill-buffer-hook #'org-src--remove-overlay nil 'local)
     (if (bound-and-true-p org-src--allow-write-back)
         (progn
@@ -164,9 +156,9 @@ previous value."
 (defun ein:get-mode-for-kernel (kernelspec)
   (if (null kernelspec)
       'python ;; FIXME
-    (ein:case-equal (ein:$kernelspec-language kernelspec)
-      (("python" "R") (intern (ein:$kernelspec-language kernelspec)))
-      (t 'python))))
+    (cond ((string-match-p "python" (ein:get-kernelspec-language kernelspec)) 'python)
+          ((string-match-p "R" (ein:get-kernelspec-language kernelspec)) 'R)
+          (t 'python))))
 
 (defun ein:edit-src-continue (e)
   (interactive "e")

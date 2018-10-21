@@ -23,7 +23,7 @@
 
 
 ;; You should have received a copy of the GNU General Public License
-;; along with ob-ein.el.  If not, see <http://www.gnu.org/licenses/>.
+;; along with ein-notebooklist.el.  If not, see <http://www.gnu.org/licenses/>.
 
 ;;; Commentary:
 ;; Support executing org-babel source blocks using EIN worksheets.
@@ -36,8 +36,6 @@
 (require 'cl)
 (require 'ein-notebook)
 (require 'ein-shared-output)
-(require 'org-src nil t)
-(require 'org-element nil t)
 (require 'ein-utils)
 (require 'python)
 
@@ -47,7 +45,8 @@
   :type 'boolean)
 
 (defcustom ein:org-inline-image-directory "ein-images"
-  "Default directory where to save images generated from ein org-babel source blocks."
+  "Default directory where to save images generated from ein
+  org-babel source blocks."
   :group 'ein
   :type '(directory))
 
@@ -55,7 +54,6 @@
 (defvar org-babel-default-header-args:ein '())
 
 (add-to-list 'org-src-lang-modes '("ein" . python))
-(add-to-list 'org-src-lang-modes '("ein-hy" . hy))
 
 ;; Handling source block execution results
 (defun ein:temp-inline-image-info (value)
@@ -88,7 +86,7 @@
    (case key
      ((svg image/svg)
       (let ((file (or file (ein:temp-inline-image-info value))))
-        (ein:write-base64-image value file)
+        (ein:write-base64-decoded-image value file)
         (format "[[file:%s]]" file)))
      ((png image/png jpeg image/jpeg)
       (let ((file (or file (ein:temp-inline-image-info value))))
@@ -115,7 +113,7 @@ The default is `ein:uuid-generator'.")
 
 (defun ein:org-get-name-create ()
   "Get the name of a src block or add a uuid as the name."
-  (if-let ((name (fifth (org-babel-get-src-block-info))))
+  (if-let* ((name (fifth (org-babel-get-src-block-info))))
       name
     (save-excursion
       (let ((el (org-element-context))
@@ -154,7 +152,7 @@ jupyter kernels.
                           (cdr (assoc :session processed-params))
                           kernelspec))
          ;; either OUTPUT or VALUE which should behave as described above
-         ;; (result-type (cdr (assoc :result-type processed-params)))
+         (result-type (cdr (assoc :result-type processed-params)))
          ;; expand the body with `org-babel-expand-body:template'
          (full-body (org-babel-expand-body:generic (encode-coding-string body 'utf-8)
                                                    params
@@ -162,9 +160,6 @@ jupyter kernels.
     (if ein:org-async-p
         (ein:ob-ein--execute-async full-body session-kernel processed-params (ein:org-get-name-create))
       (ein:ob-ein--execute full-body session-kernel processed-params))))
-
-(defun org-babel-execute:ein-hy (body params)
-  (org-babel-execute:ein (ein:pytools-wrap-hy-code body) params))
 
 (defun ein:ob-ein--execute-async (body kernel params name)
   (let ((buffer (current-buffer))
@@ -202,7 +197,7 @@ jupyter kernels.
     (save-excursion
       (org-babel-goto-named-result name)
       (search-forward (format "[[ob-ein-async-running: %s]]" name))
-      (replace-match formatted-result t t)
+      (replace-match formatted-result)
       (org-redisplay-inline-images)
       ;; (when (member "drawer" (cdr (assoc :result-params params)))
       ;;   ;; open the results drawer
@@ -212,9 +207,8 @@ jupyter kernels.
       )))
 
 (defun ein:ob-ein--execute (full-body session-kernel processed-params)
-  (let* ((d (ein:shared-output-eval-string full-body nil nil session-kernel))
-         (cell (ein:shared-output-get-cell)))
-    (deferred:sync! d)
+  (ein:shared-output-eval-string full-body nil nil session-kernel)
+  (let ((cell (ein:shared-output-get-cell)))
     (ein:wait-until #'(lambda ()
                         (null (slot-value cell 'running)))
                     nil ein:org-execute-timeout)
@@ -230,11 +224,10 @@ jupyter kernels.
   (multiple-value-bind (url-or-port path) (ein:org-babel-parse-session session)
     (setf kernelspec (or kernelspec (ein:get-kernelspec url-or-port "default")))
     (let ((nb (or (ein:notebook-get-opened-notebook url-or-port path)
-                  (ein:notebook-open url-or-port
-                                     path
-                                     kernelspec
-                                     (lambda (_nb _param session kernelspec)
-                                       (org-babel-ein-initiate-session session kernelspec))
+                  (ein:notebook-open url-or-port path kernelspec
+                                     (lambda (nb param packed)
+                                       (multiple-value-bind (session kernelspec) packed
+                                         (org-babel-ein-initiate-session session kernelspec)))
                                      (list session kernelspec)))))
       (loop do (sit-for 1.0)
             until (ein:kernel-live-p (ein:$notebook-kernel nb)))
@@ -243,23 +236,11 @@ jupyter kernels.
 (defun org-babel-edit-prep:ein (babel-info)
   "Set up source code completion for editing an EIN source block."
   (let ((nb (ein:org-find-or-open-session (cdr (assoc :session (third babel-info))))))
-    (ein:connect-buffer-to-notebook nb (current-buffer) t)
-    (define-key ein:connect-mode-map "\C-c\C-c" 'org-babel-edit:ein-execute)))
-
-(defun org-babel-edit:ein-execute ()
-  (interactive)
-  (org-edit-src-save)
-  (when (boundp 'org-src--beg-marker)
-    (let* ((beg org-src--beg-marker)
-           (buf (marker-buffer beg)))
-      (with-current-buffer buf
-        (save-excursion
-          (goto-char beg)
-          (org-ctrl-c-ctrl-c))))))
+    (ein:connect-buffer-to-notebook nb (current-buffer) t)))
 
 ;; This function should be used to assign any variables in params in
 ;; the context of the session environment.
-(defun org-babel-prep-session:ein (_session _params)
+(defun org-babel-prep-session:ein (session params)
   "Prepare SESSION according to the header arguments specified in PARAMS."
   )
 
@@ -268,7 +249,7 @@ jupyter kernels.
  specifying a var of the same value."
   (format "%S" var))
 
-(defun org-babel-ein-table-or-string (_results)
+(defun org-babel-ein-table-or-string (results)
   "If the results look like a table, then convert them into an
  Emacs-lisp table, otherwise return the results as a string."
   )
@@ -283,11 +264,11 @@ jupyter kernels.
       (values (format "http://localhost:%s" session) nil)
     (let ((session-uri (url-generic-parse-url session)))
       (cond ((url-fullness session-uri)
-             (values (ein:url (format "%s://%s:%s" (url-type session-uri) (url-host session-uri) (url-port session-uri)))
+             (values (format "%s://%s:%s" (url-type session-uri) (url-host session-uri) (url-port session-uri))
                      (url-filename session-uri)))
             (t (let* ((url-or-port (ein:org-babel-clean-url (car (split-string session "/"))))
                       (path (ein:join-str "/" (rest (split-string session "/")))))
-                 (values (ein:url (format "http://localhost:%s" url-or-port)) path)))))))
+                 (values (format "http://localhost:%s" url-or-port) path)))))))
 
 (defcustom ein:org-babel-default-session-name "ein_babel_session.ipynb"
   "Default name for org babel sessions running ein environments.
@@ -303,13 +284,10 @@ given in the session parameter."
   (when (and (stringp session) (string= session "none"))
     (error "You must specify a notebook or kernelspec as the session variable for ein code blocks."))
   (multiple-value-bind (url-or-port path) (ein:org-babel-parse-session session)
-    (when (null kernelspec)
-      ;; Now is not the time to be getting kernelspecs.
-      ;; If I must do so, need to inject a deferred callback chain like
-      ;; in ein:notebooklist
-      ;; (if (null (gethash url-or-port ein:available-kernelspecs))
-      ;;     (ein:query-kernelspecs url-or-port))
-      (setq kernelspec (ein:get-kernelspec url-or-port "default")))
+    (if (null (gethash url-or-port ein:available-kernelspecs))
+        (ein:query-kernelspecs url-or-port))
+    (if (null kernelspec)
+        (setq kernelspec (ein:get-kernelspec url-or-port "default")))
     (cond ((null path)
            (let* ((name ein:org-babel-default-session-name)
                   (new-session (format "%s/%s" url-or-port name)))

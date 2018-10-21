@@ -1,14 +1,10 @@
 (require 'ein-notebooklist)
-(require 'ein-testing-notebook)
 
 (defun eintest:notebooklist-make-empty (&optional url-or-port)
   "Make empty notebook list buffer."
-  (flet ((ein:need-kernelspecs (url-or-port))
-         (ein:content-query-sessions (session-hash url-or-port)))
-    (ein:notebooklist-open--finish
-     (make-ein:$content :url-or-port (or url-or-port ein:testing-notebook-dummy-url)
-                        :ipython-version 3
-                        :path ""))))
+  (ein:notebooklist-url-retrieve-callback (or url-or-port "DUMMY-URL")
+                                          (ein:query-ipython-version)
+                                          ""))
 
 (defmacro eintest:notebooklist-is-empty-context-of (func)
   `(ert-deftest ,(intern (format "%s--notebooklist" func)) ()
@@ -19,8 +15,8 @@
 ;; Generic getter
 
 (ert-deftest ein:get-url-or-port--notebooklist ()
-  (with-current-buffer (eintest:notebooklist-make-empty)
-    (should (equal (ein:get-url-or-port) ein:testing-notebook-dummy-url))))
+  (with-current-buffer (eintest:notebooklist-make-empty "DUMMY-URL")
+    (should (equal (ein:get-url-or-port) "DUMMY-URL"))))
 
 (eintest:notebooklist-is-empty-context-of ein:get-notebook)
 (eintest:notebooklist-is-empty-context-of ein:get-kernel)

@@ -41,8 +41,7 @@ can be handled by the xml module."
   (with-temp-buffer
     (erase-buffer)
     (insert html-string)
-    (if (fboundp 'libxml-parse-html-region)
-        (libxml-parse-html-region (point-min) (point-max)))))
+    (libxml-parse-html-region (point-min) (point-max))))
 
 (defalias 'ein:xml-node-p 'listp)
 
@@ -96,7 +95,6 @@ Draw boundaries for table (default)::
             (shr-table-vertical-line ?|)
             (shr-table-corner ?+)))
 "
-  :type '(sexp)
   :group 'ein)
 
 (defun ein:shr-insert-document (dom)

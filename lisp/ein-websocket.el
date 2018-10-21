@@ -63,9 +63,7 @@
 
 ;;(advice-add 'request--netscape-cookie-parse :around #'fix-request-netscape-cookie-parse)
 
-;; Websocket gets its cookies using the url-cookie API, so we need to copy over
-;; any cookies that are made and stored during the contents API calls via
-;; emacs-request.
+;; This seems redundant, but websocket does not work otherwise.
 (defun ein:websocket--prepare-cookies (url)
   (let* ((jh-conn (ein:jupyterhub-url-p url))
          (parsed-url (url-generic-parse-url url))
@@ -122,7 +120,7 @@
                              (ein:$websocket-onclose-args websocket)))))
               :on-error
               (lambda (ws action err)
-                (ein:log 'error "Error %s on websocket action %s (ws:%s)." err action (websocket-url ws))))))
+                (ein:log 'error "Error %s on websocket %s action %s." err ws action)))))
     (setf (websocket-client-data ws) websocket)
     (setf (ein:$websocket-ws websocket) ws)
     websocket))

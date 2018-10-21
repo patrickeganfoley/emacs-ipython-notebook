@@ -44,8 +44,8 @@
 (defvar ein:log-level 30)
 (defvar ein:log-message-level 20)
 
-(defvar ein:log-print-length 10 "`print-length' for `ein:log'")
 (defvar ein:log-print-level 1 "`print-level' for `ein:log'")
+(defvar ein:log-print-length 10 "`print-length' for `ein:log'")
 (defvar ein:log-max-string 1000)
 
 
@@ -64,16 +64,13 @@
 (defun ein:log-level-name-to-int (name)
   (cdr (assq name ein:log-level-def)))
 
-(defsubst ein:log-strip-timestamp (msg)
-  (replace-regexp-in-string "^[0-9: ]+" "" msg))
-
 (defun ein:log-wrapper (level func)
   (setq level (ein:log-level-name-to-int level))
   (when (<= level ein:log-level)
     (let* ((levname (ein:log-level-int-to-name level))
            (print-level ein:log-print-level)
            (print-length ein:log-print-length)
-           (msg (format "%s: [%s] %s" (format-time-string "%H:%M:%S:%3N") levname (funcall func)))
+           (msg (format "[%s] %s"  levname (funcall func)))
            (orig-buffer (current-buffer)))
       (if (and ein:log-max-string
                (> (length msg) ein:log-max-string))
@@ -82,7 +79,7 @@
         (goto-char (point-max))
         (insert msg (format " @%S" orig-buffer) "\n"))
       (when (<= level ein:log-message-level)
-        (message "ein: %s" (ein:log-strip-timestamp msg))))))
+        (message "ein: %s" msg)))))
 
 (defmacro ein:log (level string &rest args)
   (declare (indent 1))

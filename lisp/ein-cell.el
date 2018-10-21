@@ -61,16 +61,6 @@
   "Face for cell input area"
   :group 'ein)
 
-(defface ein:cell-output-area
-  '()
-  "Face for cell output area"
-  :group 'ein)
-
-(defface ein:cell-output-area-error
-  '()
-  "Face for cell output area errors"
-  :group 'ein)
-
 (defface ein:cell-heading-1
   '((t :height 1.1 :inherit ein:cell-heading-2))
   "Face for level 1 heading."
@@ -165,17 +155,8 @@ See also: https://github.com/tkf/emacs-ipython-notebook/issues/94"
 (defcustom ein:truncate-long-cell-output nil
   "When nil do not truncate cells with long outputs. When set to
 a number will limit the number of lines in a cell output."
-  :type '(choice (integer :tag "Number of lines to show in a cell" 5)
-                 (const :tag "Do not truncate cells with long outputs" nil))
   :group 'ein)
 
-(defcustom ein:on-execute-reply-functions nil
-  "List of functions to call after receiving an \"execute_reply\"
-  message on the shell channel, just before updating the
-  worksheet. Each function should have the same call signature as
-  `ein:cell--handle-execute-reply'."
-  :type 'list
-  :group 'ein)
 
 
 ;;; EIEIO related utils
@@ -193,16 +174,14 @@ a number will limit the number of lines in a cell output."
 (defvar ein:mime-type-map
   '((image/svg . svg) (image/png . png) (image/jpeg . jpeg)))
 
+;; # TODO: Check if we support image type before inserting it!
 (defun ein:insert-image (&rest args)
-  ;; Try to insert the image, otherwise emit a warning message and proceed.
-  (condition-case-unless-debug err
-      (let* ((img (apply #'create-image args)))
-        (if ein:slice-image
-            (destructuring-bind (&optional rows cols)
-                                (when (listp ein:slice-image) ein:slice-image)
-                                (insert-sliced-image img "." nil (or rows 20) cols))
-          (insert-image img ".")))
-    (error (ein:log 'warn "Could not insert image: %s" err) nil)))
+  (let* ((img (apply #'create-image args)))
+    (if ein:slice-image
+        (destructuring-bind (&optional rows cols)
+            (when (listp ein:slice-image) ein:slice-image)
+          (insert-sliced-image img "." nil (or rows 20) cols))
+      (insert-image img "."))))
 
 
 ;;; Cell factory
@@ -240,25 +219,18 @@ a number will limit the number of lines in a cell output."
 (defun ein:cell-from-type (type &rest args)
   (apply (ein:cell-class-from-type type) "Cell" args))
 
-(defun ein:cell--determine-cell-type (json-data)
-  (let ((base-type (plist-get json-data :cell_type))
-        (metadata (plist-get json-data :metadata)))
-    (if (and (string-equal base-type "code")
-             (plist-get :metadata :ein.hycell)
-             (not (eql (plist-get metadata :ein.hycell) :json-false)))
-        "hy-code"
-      base-type)))
-
 (defun ein:cell-from-json (data &rest args)
   (let ((data (ein:preprocess-nb4-cell data))
         (cell (ein:cell-init (apply #'ein:cell-from-type
-					                          (ein:cell--determine-cell-type data) args)
+					                          (plist-get data :cell_type) args)
 				                     data)))
     (when (plist-get data :metadata)
       (ein:oset-if-empty cell 'metadata (plist-get data :metadata))
       (ein:aif (plist-get (slot-value cell 'metadata) :slideshow)
           (let ((slide-type (nth 0 (cdr it))))
-            (setf (slot-value cell 'slidetype) slide-type))))
+            (setf (slot-value cell 'slidetype) slide-type)
+            (message "read slidetype %s" (slot-value cell 'slidetype))
+            (message "reconstructed slideshow %s" (ein:get-slide-show cell)))))
     cell))
 
 (defmethod ein:cell-init ((cell ein:codecell) data)
@@ -290,7 +262,7 @@ a number will limit the number of lines in a cell output."
 (defmethod ein:cell-convert ((cell ein:basecell) type)
   (let ((new (ein:cell-from-type type)))
     ;; copy attributes
-    (loop for k in '(read-only ewoc)
+    (loop for k in '(read-only ewoc events)
           do (set-slot-value new k (slot-value cell k)))
     ;; copy input
     (set-slot-value new 'input (if (ein:cell-active-p cell)
@@ -399,7 +371,7 @@ a number will limit the number of lines in a cell output."
            (plist-get element :input)))
         (t (call-next-method))))))
 
-(defmethod ein:cell-element-get ((cell ein:textcell) prop &rest args)
+(defmethod ein:cell-element-get ((cell ein:textcell) prop)
   (let ((element (slot-value cell 'element)))
     (case prop
       (:after-input (plist-get element :footer))
@@ -496,7 +468,7 @@ a number will limit the number of lines in a cell output."
   ;; Newline is inserted in `ein:cell-insert-input'.
   (ein:insert-read-only
    (concat
-    (format "In [%s]:" (or (ein:oref-safe cell 'input-prompt-number)  " "))
+    (format "In [%s]" (or (ein:oref-safe cell 'input-prompt-number)  " "))
     (ein:maybe-show-slideshow-data cell)
     (when (slot-value cell 'autoexec) " %s" ein:cell-autoexec-prompt))
    'font-lock-face 'ein:cell-input-prompt))
@@ -536,16 +508,6 @@ a number will limit the number of lines in a cell output."
 (defmethod ein:cell-get-input-area-face ((cell ein:headingcell))
   (intern (format "ein:cell-heading-%d" (slot-value cell 'level))))
 
-(defmethod ein:cell-get-output-area-face-for-output-type (output-type)
-  "Return the face (symbol) for output area."
-  (ein:case-equal output-type
-    (("pyout")          'ein:cell-output-area)
-    (("pyerr")          'ein:cell-output-area-error)
-    (("error")          'ein:cell-output-area-error)
-    (("display_data")   'ein:cell-output-area)
-    (("execute_result") 'ein:cell-output-area)
-    (("stream")         'ein:cell-output-area)))
-
 (defun ein:cell-insert-output (index cell)
   "Insert INDEX-th output of the CELL in the buffer.
   Called from ewoc pretty printer via `ein:cell-pp'."
@@ -577,18 +539,13 @@ a number will limit the number of lines in a cell output."
                               (plist-get last-out :stream)))
             (ein:cell-append-stream-text-fontified "\n" last-out))))
       ;; Finally insert real data
-      (let ((start (point))
-	    (output-type (plist-get out :output_type)))
-	(ein:case-equal output-type
-	  (("pyout")          (ein:cell-append-pyout        cell out))
-	  (("pyerr")          (ein:cell-append-pyerr        cell out))
-	  (("error")          (ein:cell-append-pyerr        cell out))
-	  (("display_data")   (ein:cell-append-display-data cell out))
-	  (("execute_result") (ein:cell-append-pyout        cell out))
-	  (("stream")         (ein:cell-append-stream       cell out)))
-	(let ((ol (make-overlay start (point))))
-	  (overlay-put ol 'face (ein:cell-get-output-area-face-for-output-type output-type))
-	  (overlay-put ol 'evaporate t))))))
+      (ein:case-equal (plist-get out :output_type)
+        (("pyout")          (ein:cell-append-pyout        cell out))
+        (("pyerr")          (ein:cell-append-pyerr        cell out))
+        (("error")          (ein:cell-append-pyerr        cell out))
+        (("display_data")   (ein:cell-append-display-data cell out))
+        (("execute_result") (ein:cell-append-pyout cell out))
+        (("stream")         (ein:cell-append-stream       cell out))))))
 
 (defmethod ein:cell-insert-footer ((cell ein:basecell))
   "Insert footer (just a new line) of the CELL in the buffer.
@@ -825,8 +782,7 @@ If END is non-`nil', return the location of next element."
     ;; Footer may have extra (possibly colored) newline due to the
     ;; last output type.  So invalidate it here.
     ;; See `ein:cell-insert-footer' (for codecell).
-    (let ((buffer-undo-list t))   ; disable undo recording
-      (ewoc-invalidate ewoc (ein:cell-element-get cell :footer)))))
+    (ewoc-invalidate ewoc (ein:cell-element-get cell :footer))))
 
 (defun ein:cell-output-json-to-class (json)
   (ein:case-equal (plist-get json :output_type)
@@ -956,7 +912,6 @@ If you prefer HTML type over text type, you can set it as::
           '(emacs-lisp svg png jpeg html text latex javascript))
 
 Note that ``html`` comes before ``text``."
-  :type '(choice function (repeat symbol))
   :group 'ein)
 
 (defun ein:output-type-prefer-pretty-text-over-html (data)
@@ -1033,7 +988,6 @@ prettified text thus be used instead of HTML type."
     (language . "python")
     (collapsed . ,(if (slot-value cell 'collapsed) t json-false))))
 
-
 (defvar ein:output-type-map
   '((:svg . :image/svg) (:png . :image/png) (:jpeg . :image/jpeg)
     (:text . :text/plain)
@@ -1053,9 +1007,6 @@ prettified text thus be used instead of HTML type."
     (setq metadata (plist-put metadata :collapsed (if (slot-value cell 'collapsed) t json-false)))
     (setq metadata (plist-put metadata :autoscroll json-false))
     (setq metadata (plist-put metadata :ein.tags (format "worksheet-%s" wsidx)))
-    (setq metadata (plist-put metadata :ein.hycell (if (ein:hy-codecell-p cell)
-                                                       t
-                                                     json-false)))
     (setq metadata (plist-put metadata :slideshow ss-table))
     (unless discard-output
       (dolist (output outputs)
@@ -1180,9 +1131,9 @@ prettified text thus be used instead of HTML type."
 
 (defmethod ein:cell-execute-internal ((cell ein:codecell)
                                       kernel code &rest args)
-  (ein:cell-running-set cell t)
   (ein:cell-clear-output cell t t t)
   (ein:cell-set-input-prompt cell "*")
+  (ein:cell-running-set cell t)
   (setf (slot-value cell 'dynamic) t)
   (apply #'ein:kernel-execute kernel code (ein:cell-make-callbacks cell) args))
 
@@ -1194,12 +1145,11 @@ prettified text thus be used instead of HTML type."
    :set_next_input (cons #'ein:cell--handle-set-next-input cell)))
 
 (defmethod ein:cell--handle-execute-reply ((cell ein:codecell) content
-                                           metadata)
-  (run-hook-with-args 'ein:on-execute-reply-functions cell content metadata)
+                                           -metadata-not-used-)
   (ein:cell-set-input-prompt cell (plist-get content :execution_count))
   (ein:cell-running-set cell nil)
   (if (equal (plist-get content :status) "error")
-      (ein:cell--handle-output cell "error" content metadata)
+      (ein:cell--handle-output cell "error" content -metadata-not-used-)
     (let ((events (slot-value cell 'events)))
       (ein:events-trigger events 'set_dirty.Worksheet (list :value t :cell cell))
       (ein:events-trigger events 'maybe_reset_undo.Worksheet cell))))
@@ -1208,8 +1158,7 @@ prettified text thus be used instead of HTML type."
   (let ((events (slot-value cell 'events)))
     (ein:events-trigger events 'set_next_input.Worksheet
                         (list :cell cell :text text))
-    (ein:events-trigger events 'maybe_reset_undo.Worksheet cell)
-    ))
+    (ein:events-trigger events 'maybe_reset_undo.Worksheet cell)))
 
 
 
@@ -1240,8 +1189,7 @@ prettified text thus be used instead of HTML type."
        (plist-put json :traceback (plist-get content :traceback))))
     (ein:cell-append-output cell json t)
     ;; (setf (slot-value cell 'dirty) t)
-    (ein:events-trigger (slot-value cell 'events) 'maybe_reset_undo.Worksheet cell)
-    ))
+    (ein:events-trigger (slot-value cell 'events) 'maybe_reset_undo.Worksheet cell)))
 
 
 (defun ein:output-area-convert-mime-types (json data)
@@ -1265,7 +1213,7 @@ prettified text thus be used instead of HTML type."
   (ein:cell-clear-output cell
                          t ;;(plist-get content :stdout)
                          t ;;(plist-get content :stderr)
-                         t ;;(plist-get content :other))
+                         t ;;(plist-get content :other)
                          )
   (ein:events-trigger (slot-value cell 'events) 'maybe_reset_undo.Worksheet cell))
 

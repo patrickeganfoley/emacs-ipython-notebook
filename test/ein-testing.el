@@ -26,7 +26,6 @@
 ;;; Code:
 
 (require 'ein-log)
-(require 'request)
 
 (defmacro ein:setq-if-not (sym val)
   `(unless ,sym (setq ,sym ,val)))
@@ -37,11 +36,9 @@
 (defvar ein:testing-dump-file-messages nil
   "File to save the ``*Messages*`` buffer.")
 
-(defvar ein:testing-dump-file-server nil
-  "File to save `ein:jupyter-server-buffer-name`.")
+(defvar ein:testing-dump-file-debug nil)
 
-(defvar ein:testing-dump-file-request nil
-  "File to save `request-log-buffer-name`.")
+(defvar ein:testing-dump-server-log nil)
 
 (defun ein:testing-save-buffer (buffer-or-name file-name)
   (when (and buffer-or-name (get-buffer buffer-or-name) file-name)
@@ -50,37 +47,29 @@
 
 (defun ein:testing-dump-logs ()
   (ein:testing-save-buffer "*Messages*" ein:testing-dump-file-messages)
-  (ein:testing-save-buffer "*ein:jupyter-server*" ein:testing-dump-file-server)
-  (ein:testing-save-buffer ein:log-all-buffer-name ein:testing-dump-file-log)
-  (ein:testing-save-buffer request-log-buffer-name ein:testing-dump-file-request))
+  (ein:testing-save-buffer "*ein:jupyter-server*" ein:testing-dump-server-log)
+  (ein:testing-save-buffer ein:log-all-buffer-name ein:testing-dump-file-log))
 
-(defun ein:testing-flush-queries (&optional ms interval continue)
-  "Forget all the deferred:flush-queue! and deferred:sync! and all the semaphore
-callbacks.  This is what I need."
-  (ein:testing-wait-until (lambda ()
-                            (ein:query-gc-running-process-table)
-                            (zerop (hash-table-count ein:query-running-process-table)))
-                          nil ms interval continue))
+(defvar ein:testing-dump-logs--saved nil)
 
-(defun ein:testing-wait-until (predicate &optional predargs ms interval continue)
-  "Wait until PREDICATE function returns non-`nil'.
-  PREDARGS is argument list for the PREDICATE function.
-  MS is milliseconds to wait.  INTERVAL is polling interval in milliseconds."
-  (let* ((int (ein:aif interval it (ein:aif ms (max 300 (/ ms 10)) 300)))
-         (count (max 1 (if ms (truncate (/ ms int)) 25))))
-    (unless (or (loop repeat count
-                       when (apply predicate predargs)
-                       return t
-                       do (sleep-for 0 int)) 
-                continue)
-      (error "Timeout: %s" predicate))))
+(defun ein:testing-dump-logs-noerror ()
+  (if ein:testing-dump-logs--saved
+      (message "EIN:TESTING-DUMP-LOGS-NOERROR called but already saved.")
+    (condition-case err
+        (progn (ein:testing-dump-logs)
+               (setq ein:testing-dump-logs--saved t))
+      (error
+       (message "Error while executing EIN:TESTING-DUMP-LOGS. err = %S"
+                err)
+       (when ein:testing-dump-file-debug
+         (signal (car err) (cdr err)))))))
 
 (defadvice ert-run-tests-batch (after ein:testing-dump-logs-hook activate)
-  "Hook `ein:testing-dump-logs-hook' because `kill-emacs-hook'
+  "Hook `ein:testing-dump-logs-noerror' because `kill-emacs-hook'
 is not run in batch mode before Emacs 24.1."
-  (ein:testing-dump-logs))
+  (ein:testing-dump-logs-noerror))
 
-(add-hook 'kill-emacs-hook #'ein:testing-dump-logs)
+(add-hook 'kill-emacs-hook #'ein:testing-dump-logs-noerror)
 
 (provide 'ein-testing)
 

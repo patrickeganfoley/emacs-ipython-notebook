@@ -31,7 +31,6 @@
 
 (require 'ein-worksheet)
 (require 'ein-multilang-fontify)
-(require 'python)
 
 (defun ein:ml-fontify (limit)
   "Fontify next input area comes after the current point then
